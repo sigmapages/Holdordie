@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ĐỪNG RỜI TAY</title>
+    <style>
+        body { margin:0; overflow:hidden; background:#111; font-family: 'Segoe UI', sans-serif; user-select: none; touch-action: none; }
+        canvas { display:block; }
+        #overlay {
+            position:absolute; top:0; left:0; width:100%; height:100%;
+            display:flex; flex-direction:column; justify-content:center; align-items:center;
+            background: rgba(0,0,0,0.95); z-index: 100; color: white;
+        }
+        button {
+            padding:15px 45px; font-size:24px; font-weight:bold;
+            cursor:pointer; background: #ff4757; color: white; border: none; 
+            border-radius: 50px; box-shadow: 0 0 20px #ff4757; transition: 0.2s;
+        }
+        button:active { transform: scale(0.9); }
+    </style>
+</head>
+<body>
+
+<div id="overlay">
+    <h1 style="margin-bottom:10px">ĐỪNG RỜI TAY</h1>
+    <p style="margin-bottom:30px; color: #aaa;">Giữ tất cả các nút xuất hiện trên màn hình!</p>
+    <button id="startBtn">BẮT ĐẦU</button>
+</div>
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const startBtn = document.getElementById('startBtn');
+const overlay = document.getElementById('overlay');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// --- ÂM THANH (WEB AUDIO API - BAO CHẠY) ---
+let audioCtx, oscillator, gainNode;
+function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    oscillator = audioCtx.createOscillator();
+    gainNode = audioCtx.createGain();
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    oscillator.start();
+}
+
+function playBeep(freq, dur) {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    oscillator.frequency.setValueAtTime(freq, now);
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(0.1, now + 0.05);
+    gainNode.gain.linearRampToValueAtTime(0, now + dur);
+}
+
+// --- BIẾN GAME ---
+let phase = 1, time = 0, gameOver = false, canInput = false;
+let buttons = [];
+let mouse = { x: 0, y: 0 };
+let bestTime = localStorage.getItem('bestTime') || 0;
+let lastBeep = 0;
+
+function resetGame() {
+    phase = 1; time = 0; gameOver = false; canInput = false;
+    // Reset về 1 nút đỏ ở giữa
+    buttons = [{ x: canvas.width/2, y: canvas.height/2, r: 45, color: '#ff4757', active: false, vx: 0, vy: 0 }];
+    setTimeout(() => { canInput = true; }, 200);
+}
+
+// --- XỬ LÝ ĐẦU VÀO ---
+function handleStart(ex, ey) {
+    if (gameOver) { resetGame(); return; }
+    if (!canInput) return;
+    mouse.x = ex; mouse.y = ey;
+    buttons.forEach(b => {
+        if (Math.hypot(mouse.x - b.x, mouse.y - b.y) < b.r + 20) b.active = true;
+    });
+}
+
+function handleEnd() {
+    if (!canInput || gameOver) return;
+    // Kiểm tra xem có phải vừa buông tay dẫn đến thua không
+    if (buttons.some(b => b.active)) {
+        buttons.forEach(b => b.active = false);
+        endGame();
+    }
+}
+
+function endGame() {
+    gameOver = true;
+    if (time > bestTime) {
+        bestTime = time;
+        localStorage.setItem('bestTime', bestTime.toFixed(2));
+    }
+    playBeep(150, 0.5); // Tiếng trầm khi thua
+}
+
+// Event Listeners
+startBtn.addEventListener('click', () => { initAudio(); overlay.style.display = 'none'; resetGame(); });
+canvas.addEventListener("mousedown", e => handleStart(e.clientX, e.clientY));
+window.addEventListener("mouseup", handleEnd);
+canvas.addEventListener("touchstart", e => { e.preventDefault(); handleStart(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+window.addEventListener("touchend", handleEnd);
+window.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+window.addEventListener("touchmove", e => { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; }, {passive:false});
+
+// --- VÒNG LẶP CHÍNH ---
+function update() {
+    if (gameOver || !canInput) return;
+
+    const allActive = buttons.every(b => b.active);
+    if (allActive) {
+        time += 0.016;
+        
+        // Cập nhật Phase
+        if (time < 5) phase = 1;
+        else if (time < 12) phase = 2;
+        else if (time < 20) phase = 3;
+        else phase = 4;
+
+        // Tiếng beep theo nhịp (nhanh dần theo phase)
+        let beepRate = Math.max(0.2, 0.8 - (phase * 0.15));
+        if (time - lastBeep > beepRate) {
+            playBeep(440 + (phase * 100), 0.1);
+            lastBeep = time;
+        }
+
+        // Logic từng Phase
+        buttons.forEach((b, index) => {
+            if (phase >= 2) {
+                // Nút di chuyển loăng quăng
+                let speed = phase * 1.5;
+                b.x += Math.sin(time * speed + index) * speed;
+                b.y += Math.cos(time * speed * 0.8 + index) * speed;
+                
+                // Giữ trong màn hình
+                if (b.x < b.r) b.x = b.r; if (b.x > canvas.width - b.r) b.x = canvas.width - b.r;
+                if (b.y < b.r) b.y = b.r; if (b.y > canvas.height - b.r) b.y = canvas.height - b.r;
+            }
+        });
+
+        // Phase 3: Thêm nút thứ hai
+        if (phase >= 3 && buttons.length < 2) {
+            buttons.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, r: 40, color: '#2ed573', active: false });
+        }
+
+        // Kiểm tra xem tay có rời nút không
+        buttons.forEach(b => {
+            if (Math.hypot(mouse.x - b.x, mouse.y - b.y) > b.r + 30) endGame();
+        });
+    }
+}
+
+function draw() {
+    // Phase 4 nhấp nháy màn hình
+    let bg = "#111";
+    if (phase === 4 && Math.floor(time * 10) % 2 === 0) bg = "#222";
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    buttons.forEach(b => {
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r + (b.active ? 5 : 0), 0, Math.PI * 2);
+        ctx.fillStyle = b.active ? b.color : "#444";
+        ctx.fill();
+        if (b.active) {
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+    });
+
+    // UI
+    ctx.fillStyle = "white";
+    ctx.font = "bold 22px Arial";
+    ctx.fillText(`PHASE: ${phase}`, 25, 45);
+    ctx.fillText(`TIME: ${time.toFixed(2)}s`, 25, 80);
+    ctx.fillStyle = "#666";
+    ctx.font = "18px Arial";
+    ctx.fillText(`BEST: ${bestTime}s`, 25, 110);
+
+    if (gameOver) {
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#ff4757";
+        ctx.font = "bold 50px Arial";
+        ctx.fillText("GAME OVER", canvas.width/2, canvas.height/2);
+        ctx.fillStyle = "white";
+        ctx.font = "20px Arial";
+        ctx.fillText(`Bạn trụ được ${time.toFixed(2)} giây`, canvas.width/2, canvas.height/2 + 50);
+        ctx.fillText("Chạm màn hình để phục thù!", canvas.width/2, canvas.height/2 + 90);
+        ctx.textAlign = "left";
+    }
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+loop();
+
+window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+</script>
+</body>
+</html>
