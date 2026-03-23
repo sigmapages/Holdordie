@@ -5,27 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ĐỪNG RỜI TAY</title>
     <style>
-        body { margin:0; overflow:hidden; background:#0a0a0a; font-family: 'Segoe UI', sans-serif; user-select: none; touch-action: none; }
+        body { margin:0; overflow:hidden; background:#050505; font-family: 'Courier New', Courier, monospace; user-select: none; touch-action: none; }
         canvas { display:block; }
         #overlay {
             position:absolute; top:0; left:0; width:100%; height:100%;
             display:flex; flex-direction:column; justify-content:center; align-items:center;
-            background: rgba(0,0,0,0.9); z-index: 100; color: white; text-align: center;
+            background: rgba(0,0,0,0.95); z-index: 100; color: #ff4757; text-align: center;
         }
         button {
-            padding:18px 50px; font-size:24px; font-weight:bold; cursor:pointer;
-            background: #ff4757; color: white; border: none; border-radius: 50px;
-            box-shadow: 0 0 20px #ff4757; transition: 0.2s;
+            padding:15px 50px; font-size:24px; font-weight:bold; cursor:pointer;
+            background: transparent; color: #ff4757; border: 2px solid #ff4757; border-radius: 5px;
+            transition: 0.3s;
         }
-        .desc { color: #888; margin: 15px 0 30px; line-height: 1.5; }
+        button:hover { background: #ff4757; color: white; box-shadow: 0 0 20px #ff4757; }
     </style>
 </head>
 <body>
 
 <div id="overlay">
-    <h1>ĐỪNG RỜI TAY</h1>
-    <p class="desc">Giữ tất cả các nút.<br>Chú ý mũi tên để biết hướng di chuyển!</p>
-    <button id="startBtn">BẮT ĐẦU</button>
+    <h1 style="letter-spacing: 5px;">STAY ON POINT</h1>
+    <p style="color: #666; margin-bottom: 30px;">Phase 1-5: Trụ vững đến giây cuối cùng.</p>
+    <button id="startBtn">START MISSION</button>
 </div>
 <canvas id="game"></canvas>
 
@@ -38,105 +38,58 @@ const overlay = document.getElementById('overlay');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// --- ÂM THANH (WEB AUDIO) ---
-let audioCtx, oscillator, gainNode;
-function initAudio() {
-    if (audioCtx) return;
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    oscillator = audioCtx.createOscillator();
-    gainNode = audioCtx.createGain();
-    oscillator.type = 'sine';
-    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-    oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    oscillator.start();
-}
-
-function playBeep(freq, dur, vol=0.1) {
-    if (!audioCtx) return;
-    const now = audioCtx.currentTime;
-    oscillator.frequency.setTargetAtTime(freq, now, 0.01);
-    gainNode.gain.cancelScheduledValues(now);
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(vol, now + 0.05);
-    gainNode.gain.linearRampToValueAtTime(0, now + dur);
-}
-
-// --- LOGIC GAME ---
 let phase = 1, time = 0, gameOver = false, canInput = false;
 let buttons = [];
 let mouse = { x: 0, y: 0 };
 let bestTime = localStorage.getItem('bestTime') || 0;
-let lastBeepTime = 0;
+let shakeTime = 0;
 
 class GameButton {
     constructor(x, y, r, color) {
         this.x = x; this.y = y; this.r = r; this.baseColor = color;
         this.active = false;
-        this.vx = 0; this.vy = 0;
-        this.targetAngle = 0;
         this.state = 'idle'; // idle, warning, moving
         this.timer = 0;
+        this.targetAngle = 0;
     }
-
     update(dt) {
         if (phase < 2 || !this.active) return;
-
         this.timer -= dt;
         if (this.timer <= 0) {
-            if (this.state === 'idle' || this.state === 'moving') {
-                // Chuyển sang cảnh báo
+            if (this.state !== 'warning') {
                 this.state = 'warning';
-                this.timer = 1.0; // 1 giây hiện mũi tên
+                this.timer = 0.8; 
                 this.targetAngle = Math.random() * Math.PI * 2;
                 this.vx = 0; this.vy = 0;
             } else {
-                // Bắt đầu phóng đi
                 this.state = 'moving';
-                this.timer = 1.5 + Math.random(); // Di chuyển trong 1.5-2.5s
-                let speed = 2 + (phase * 0.8);
+                this.timer = 1.2 + Math.random();
+                let speed = 2.5 + (phase * 1.1);
                 this.vx = Math.cos(this.targetAngle) * speed;
                 this.vy = Math.sin(this.targetAngle) * speed;
             }
         }
-
         if (this.state === 'moving') {
-            this.x += this.vx;
-            this.y += this.vy;
-            // Va chạm tường
+            this.x += this.vx; this.y += this.vy;
             if (this.x < this.r || this.x > canvas.width - this.r) this.vx *= -1;
             if (this.y < this.r || this.y > canvas.height - this.r) this.vy *= -1;
         }
     }
-
     draw() {
-        // Vẽ mũi tên cảnh báo
         if (this.state === 'warning' && this.active) {
             ctx.save();
             ctx.translate(this.x, this.y);
             ctx.rotate(this.targetAngle);
-            ctx.beginPath();
-            ctx.moveTo(this.r + 10, 0);
-            ctx.lineTo(this.r + 40, 0);
-            ctx.strokeStyle = "white"; ctx.lineWidth = 4; ctx.stroke();
-            // Đầu mũi tên
-            ctx.beginPath();
-            ctx.moveTo(this.r + 40, 0); ctx.lineTo(this.r + 30, -10);
-            ctx.lineTo(this.r + 30, 10); ctx.closePath();
-            ctx.fillStyle = "white"; ctx.fill();
+            ctx.beginPath(); ctx.moveTo(this.r + 5, 0); ctx.lineTo(this.r + 35, 0);
+            ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 3; ctx.stroke();
             ctx.restore();
         }
-
-        // Vẽ nút
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-        let color = this.active ? this.baseColor : "#444";
-        if (phase >= 4 && this.active && Math.floor(time*5)%2===0) color = "#fff"; // Debuff nháy nút
-        ctx.fillStyle = color;
-        ctx.fill();
-        if (this.active) {
-            ctx.strokeStyle = "white"; ctx.lineWidth = 3; ctx.stroke();
-        }
+        let color = this.active ? this.baseColor : "#222";
+        if (phase >= 4 && this.active && Math.floor(time*6)%2===0) color = "#fff";
+        ctx.fillStyle = color; ctx.fill();
+        if (this.active) { ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke(); }
     }
 }
 
@@ -148,20 +101,19 @@ function resetGame() {
 
 function endGame() {
     if (gameOver) return;
-    gameOver = true; playBeep(100, 0.6, 0.2);
+    gameOver = true; shakeTime = 15; // Rung màn hình khi thua
     if (time > bestTime) {
         bestTime = time.toFixed(2);
         localStorage.setItem('bestTime', bestTime);
     }
 }
 
-// --- INPUT HANDLERS ---
 function handleStart(ex, ey) {
     if (gameOver) { resetGame(); return; }
     if (!canInput) return;
     mouse.x = ex; mouse.y = ey;
     buttons.forEach(b => {
-        if (Math.hypot(mouse.x - b.x, mouse.y - b.y) < b.r + 20) b.active = true;
+        if (Math.hypot(mouse.x - b.x, mouse.y - b.y) < b.r + 25) b.active = true;
     });
 }
 
@@ -173,46 +125,28 @@ function handleEnd() {
     }
 }
 
-startBtn.addEventListener('click', () => { initAudio(); overlay.style.display='none'; resetGame(); });
+startBtn.addEventListener('click', () => { overlay.style.display='none'; resetGame(); });
 canvas.addEventListener("mousedown", e => handleStart(e.clientX, e.clientY));
 window.addEventListener("mouseup", handleEnd);
 canvas.addEventListener("touchstart", e => { e.preventDefault(); handleStart(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
 window.addEventListener("touchend", handleEnd);
 window.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-window.addEventListener("touchmove", e => { e.preventDefault(); mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; }, {passive:false});
+window.addEventListener("touchmove", e => { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; }, {passive:false});
 
-// --- LOOP ---
 function update() {
     if (gameOver || !canInput) return;
-
     if (buttons.every(b => b.active)) {
         time += 0.016;
-        
-        // Cập nhật Phase
         if (time < 5) phase = 1;
-        else if (time < 15) phase = 2;
-        else if (time < 25) phase = 3;
+        else if (time < 12) phase = 2;
+        else if (time < 22) phase = 3;
         else if (time < 35) phase = 4;
         else phase = 5;
 
-        // Beep nhịp điệu
-        if (time - lastBeepTime > 0.6 - (phase * 0.08)) {
-            playBeep(400 + (phase * 80), 0.1);
-            lastBeepTime = time;
-        }
-
-        // Cập nhật từng nút
         buttons.forEach(b => b.update(0.016));
+        if (phase >= 3 && buttons.length < 2) buttons.push(new GameButton(Math.random()*canvas.width, Math.random()*canvas.height, 40, '#2ed573'));
+        if (phase >= 5 && buttons.length < 3) buttons.push(new GameButton(Math.random()*canvas.width, Math.random()*canvas.height, 35, '#3742fa'));
 
-        // Phase Logic: Thêm nút
-        if (phase >= 3 && buttons.length < 2) {
-            buttons.push(new GameButton(Math.random()*canvas.width, Math.random()*canvas.height, 40, '#2ed573'));
-        }
-        if (phase >= 5 && buttons.length < 3) {
-            buttons.push(new GameButton(Math.random()*canvas.width, Math.random()*canvas.height, 35, '#3742fa'));
-        }
-
-        // Check tuột tay
         buttons.forEach(b => {
             if (Math.hypot(mouse.x - b.x, mouse.y - b.y) > b.r + 30) endGame();
         });
@@ -220,44 +154,39 @@ function update() {
 }
 
 function draw() {
-    // Phase 4: Debuff thị lực - Nháy màn hình
-    let bg = "#0a0a0a";
-    if (phase >= 4 && Math.floor(time * 8) % 2 === 0) bg = "#1a1a1a";
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    if (shakeTime > 0) {
+        ctx.translate(Math.random()*10-5, Math.random()*10-5);
+        shakeTime--;
+    }
+
+    let bg = "#050505";
+    if (phase >= 4 && Math.floor(time * 10) % 2 === 0) bg = "#111";
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     buttons.forEach(b => b.draw());
 
-    // UI
-    ctx.fillStyle = "white";
-    ctx.font = "bold 20px Monospace";
-    ctx.fillText(`PHASE: ${phase}`, 20, 40);
-    ctx.fillText(`TIME: ${time.toFixed(2)}s`, 20, 70);
-    ctx.fillStyle = "#555";
-    ctx.fillText(`BEST: ${bestTime}s`, 20, 100);
+    ctx.fillStyle = "#ff4757"; ctx.font = "bold 16px Monospace";
+    ctx.fillText(`PHASE_${phase}`, 25, 45);
+    ctx.fillText(`TIME_${time.toFixed(2)}`, 25, 75);
+    ctx.fillStyle = "#333";
+    ctx.fillText(`BEST_${bestTime}`, 25, 105);
 
     if (gameOver) {
-        ctx.fillStyle = "rgba(0,0,0,0.85)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.textAlign = "center";
-        ctx.fillStyle = "#ff4757";
-        ctx.font = "bold 50px Arial";
-        ctx.fillText("GAME OVER", canvas.width/2, canvas.height/2 - 20);
-        ctx.fillStyle = "white";
-        ctx.font = "20px Arial";
-        ctx.fillText(`Kỷ lục: ${time.toFixed(2)} giây`, canvas.width/2, canvas.height/2 + 40);
-        ctx.fillText("Chạm để thử lại", canvas.width/2, canvas.height/2 + 80);
+        ctx.fillStyle = "rgba(0,0,0,0.9)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.textAlign = "center"; ctx.fillStyle = "#ff4757"; ctx.font = "bold 40px Arial";
+        ctx.fillText("MISSION FAILED", canvas.width/2, canvas.height/2);
+        ctx.fillStyle = "white"; ctx.font = "16px Monospace";
+        ctx.fillText(`SCORE: ${time.toFixed(2)}s`, canvas.width/2, canvas.height/2 + 50);
+        ctx.fillText("TAP TO RETRY", canvas.width/2, canvas.height/2 + 90);
         ctx.textAlign = "left";
     }
+    ctx.restore();
 }
 
 function loop() { update(); draw(); requestAnimationFrame(loop); }
 loop();
-
-window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-});
+window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
 </script>
 </body>
 </html>
