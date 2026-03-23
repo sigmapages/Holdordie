@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>STAY ON POINT - SUPREME</title>
+    <title>STAY ON POINT - THE ULTIMATE</title>
     <style>
         :root { --bg: #000; --accent: #ff4757; }
-        body { margin:0; overflow:hidden; background: var(--bg); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; touch-action: none; }
+        body { margin:0; overflow:hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; user-select: none; touch-action: none; }
         canvas { display:block; }
         #overlay {
             position:absolute; top:0; left:0; width:100%; height:100%;
@@ -14,13 +14,11 @@
             background: rgba(0,0,0,0.95); z-index: 100; color: var(--accent); text-align: center;
         }
         .theme-selector { display: flex; gap: 10px; margin: 20px 0; }
-        .theme-btn { padding: 10px 18px; cursor: pointer; border: 2px solid; border-radius: 6px; background: transparent; color: inherit; font-weight: bold; font-size: 13px; transition: 0.2s; }
-        .theme-btn:hover { background: rgba(255,255,255,0.1); }
-        #startBtn { padding:18px 70px; font-size:26px; font-weight:bold; cursor:pointer; background: var(--accent); color: white; border: none; border-radius: 50px; box-shadow: 0 0 25px var(--accent); transition: 0.3s; }
-        #startBtn:active { transform: scale(0.95); }
+        .theme-btn { padding: 10px 18px; cursor: pointer; border: 2px solid; border-radius: 6px; background: transparent; color: inherit; font-weight: bold; }
+        #startBtn { padding:18px 70px; font-size:26px; font-weight:bold; cursor:pointer; background: var(--accent); color: white; border: none; border-radius: 50px; box-shadow: 0 0 25px var(--accent); }
         #exitBtn {
             position: absolute; top: 20px; right: 20px; padding: 10px 15px;
-            background: rgba(255,255,255,0.1); color: #888; border: 1px solid #444;
+            background: rgba(255,255,255,0.1); color: #fff; border: 1px solid #444;
             border-radius: 5px; cursor: pointer; display: none; z-index: 200; font-size: 12px;
         }
     </style>
@@ -28,15 +26,14 @@
 <body>
 
 <div id="overlay">
-    <h1 style="letter-spacing: 8px; font-size: 40px; margin-bottom: 10px;">SUPREME TRAINER</h1>
-    <p style="color: #666; margin-bottom: 20px;">Phản xạ đa điểm - Double tap EXIT to menu</p>
+    <h1 style="letter-spacing: 8px;">SUPREME TRAINER</h1>
     <div class="theme-selector">
         <button class="theme-btn" onclick="setTheme('nightmare')">NIGHTMARE</button>
         <button class="theme-btn" onclick="setTheme('space')">SPACE</button>
         <button class="theme-btn" onclick="setTheme('chill')">CHILL</button>
     </div>
     <button id="startBtn">START</button>
-    <div id="bestDisplay" style="margin-top:20px; color:#fff; font-family: monospace; font-size: 20px;">BEST: 0.00s</div>
+    <div id="bestDisplay" style="margin-top:20px; color:#fff; font-size: 20px;">BEST: 0.00s</div>
 </div>
 
 <button id="exitBtn">EXIT (DOUBLE TAP)</button>
@@ -47,7 +44,6 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const overlay = document.getElementById('overlay');
 const exitBtn = document.getElementById('exitBtn');
-const bestDisplay = document.getElementById('bestDisplay');
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
@@ -67,11 +63,10 @@ function setTheme(name) {
 }
 
 function updateBestDisplay() {
-    let best = localStorage.getItem('best_supreme') || 0;
-    bestDisplay.innerText = `BEST: ${parseFloat(best).toFixed(2)}s`;
+    let best = localStorage.getItem('best_supreme_v2') || 0;
+    document.getElementById('bestDisplay').innerText = `BEST: ${parseFloat(best).toFixed(2)}s`;
 }
 
-// --- GAME STATE ---
 let phase = 1, time = 0, gameOver = false, canInput = false;
 let buttons = [];
 let mouse = { x: 0, y: 0 };
@@ -83,121 +78,149 @@ class GameButton {
         this.active = false; this.state = 'idle'; this.timer = 0;
         this.vx = 0; this.vy = 0; this.targetAngle = 0;
     }
+
     update(dt) {
-        if (phase < 2 || !this.active) return;
+        if (!this.active) return;
         this.timer -= dt;
+
         if (this.timer <= 0) {
-            let isTrap = (phase >= 6 && Math.random() < 0.25);
+            // Logic bẫy tam giác ở Phase 6
+            let isTrap = (phase === 6 && Math.random() < 0.25);
+            
             if (this.state !== 'warning' && this.state !== 'trap_warning') {
-                if (isTrap) { this.state = 'trap_warning'; this.timer = 0.8; }
-                else { this.state = 'warning'; this.timer = (phase >= 7) ? 0.05 : 0.8; this.targetAngle = Math.random()*Math.PI*2; }
+                if (isTrap) {
+                    this.state = 'trap_warning';
+                    this.timer = 0.8;
+                } else {
+                    this.state = 'warning';
+                    // Phase 7 mất thời gian cảnh báo (Blind)
+                    this.timer = (phase >= 7) ? 0.01 : 0.8;
+                    this.targetAngle = Math.random() * Math.PI * 2;
+                }
                 this.vx = 0; this.vy = 0;
             } else if (this.state === 'warning') {
-                this.state = 'moving'; this.timer = 1.5;
-                let s = 2.5 + (phase * 1.3);
-                this.vx = Math.cos(this.targetAngle)*s; this.vy = Math.sin(this.targetAngle)*s;
-            } else { 
-                this.state = 'trap_active'; this.timer = 2.0; 
-                let s = 3.5 + phase; let a = Math.random()*Math.PI*2; 
-                this.vx = Math.cos(a)*s; this.vy = Math.sin(a)*s; 
+                this.state = 'moving';
+                this.timer = 1.5 + Math.random();
+                let speed = 2.0 + (phase * 1.3);
+                this.vx = Math.cos(this.targetAngle) * speed;
+                this.vy = Math.sin(this.targetAngle) * speed;
+            } else if (this.state === 'trap_warning') {
+                this.state = 'trap_active';
+                this.timer = 2.0;
+                let s = 5; let a = Math.random() * Math.PI * 2;
+                this.vx = Math.cos(a) * s; this.vy = Math.sin(a) * s;
             }
         }
-        if (this.state==='moving' || this.state==='trap_active') {
-            this.x+=this.vx; this.y+=this.vy;
-            if (this.x<this.r || this.x>canvas.width-this.r) this.vx*=-1;
-            if (this.y<this.r || this.y>canvas.height-this.r) this.vy*=-1;
+
+        if (this.state === 'moving' || this.state === 'trap_active') {
+            this.x += this.vx; this.y += this.vy;
+            if (this.x < this.r || this.x > canvas.width - this.r) this.vx *= -1;
+            if (this.y < this.r || this.y > canvas.height - this.r) this.vy *= -1;
         }
     }
+
     draw() {
         const t = themes[currentTheme];
         ctx.beginPath();
         if (this.state === 'trap_active') {
-            ctx.moveTo(this.x, this.y-this.r-8); ctx.lineTo(this.x-this.r-8, this.y+this.r+2); ctx.lineTo(this.x+this.r+8, this.y+this.r+2); ctx.closePath();
-            ctx.fillStyle = (currentTheme === 'chill') ? "#fff" : "#000"; ctx.fill(); 
+            ctx.moveTo(this.x, this.y - this.r - 5);
+            ctx.lineTo(this.x - this.r - 5, this.y + this.r);
+            ctx.lineTo(this.x + this.r + 5, this.y + this.r);
+            ctx.closePath();
+            ctx.fillStyle = (currentTheme === 'chill') ? "#fff" : "#000"; ctx.fill();
             ctx.strokeStyle = t.trap; ctx.lineWidth = 4; ctx.stroke();
         } else {
-            ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+            ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
             ctx.fillStyle = this.active ? this.baseColor : "#444"; ctx.fill();
-            ctx.strokeStyle = (this.state==='trap_warning' && Math.floor(time*10)%2===0) ? t.trap : "#fff";
+            ctx.strokeStyle = (this.state === 'trap_warning' && Math.floor(time * 10) % 2 === 0) ? "#fff" : "white";
             ctx.lineWidth = 3; ctx.stroke();
+            
+            // MŨI TÊN CHỈ HƯỚNG (Ẩn ở Phase 7)
+            if (this.active && this.state === 'warning' && phase < 7) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.targetAngle);
+                ctx.beginPath();
+                ctx.moveTo(this.r + 5, 0);
+                ctx.lineTo(this.r + 35, 0);
+                ctx.strokeStyle = "rgba(255,255,255,0.8)";
+                ctx.lineWidth = 4;
+                ctx.stroke();
+                ctx.restore();
+            }
         }
     }
 }
 
 function resetGame() {
-    phase = 1; time = 0; gameOver = false;
-    buttons = [new GameButton(canvas.width/2, canvas.height/2, 45, themes[currentTheme].accent)];
+    phase = 1; time = 0; gameOver = false; canInput = true;
+    buttons = [new GameButton(canvas.width / 2, canvas.height / 2, 45, themes[currentTheme].accent)];
     overlay.style.display = 'none';
     exitBtn.style.display = 'block';
-    setTimeout(() => { canInput = true; }, 100);
 }
 
 function endGame() {
     if (gameOver) return;
     gameOver = true;
     exitBtn.style.display = 'none';
-    let best = localStorage.getItem('best_supreme') || 0;
-    if (time > best) localStorage.setItem('best_supreme', time);
+    let best = localStorage.getItem('best_supreme_v2') || 0;
+    if (time > best) localStorage.setItem('best_supreme_v2', time);
 }
 
 function drawRadar(cx, cy, r) {
     const labels = ["SPEED", "ACCURACY", "SURVIVAL", "PHASE"];
-    const data = [Math.min(1, time/30), 0.8, Math.min(1, time/60), Math.min(1, phase/7)];
+    const data = [Math.min(1, time/35), 0.85, Math.min(1, time/60), Math.min(1, phase/7)];
     ctx.strokeStyle = "rgba(255,255,255,0.2)";
     for(let i=1; i<=5; i++){
         ctx.beginPath();
-        for(let j=0; j<4; j++){
+        for(let j=0; j<4; j++) {
             let a = (j/4)*Math.PI*2 - Math.PI/2;
             ctx.lineTo(cx + Math.cos(a)*(r/5*i), cy + Math.sin(a)*(r/5*i));
         }
         ctx.closePath(); ctx.stroke();
     }
-    ctx.beginPath(); ctx.fillStyle = "rgba(255, 71, 87, 0.4)";
+    ctx.beginPath(); ctx.fillStyle = "rgba(255, 71, 87, 0.5)";
     for(let i=0; i<4; i++){
         let a = (i/4)*Math.PI*2 - Math.PI/2;
         ctx.lineTo(cx + Math.cos(a)*(data[i]*r), cy + Math.sin(a)*(data[i]*r));
     }
-    ctx.closePath(); ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth=2; ctx.stroke();
-    ctx.fillStyle = "#fff"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
+    ctx.closePath(); ctx.fill(); ctx.strokeStyle = "#fff"; ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = "12px Arial"; ctx.textAlign = "center";
     for(let i=0; i<4; i++){
         let a = (i/4)*Math.PI*2 - Math.PI/2;
         ctx.fillText(labels[i], cx + Math.cos(a)*(r+25), cy + Math.sin(a)*(r+25));
     }
 }
 
-// --- EXIT LOGIC (DOUBLE TAP) ---
 exitBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     let now = Date.now();
-    if (now - lastExitTap < 300) { // Nếu chạm 2 lần cách nhau < 300ms
+    if (now - lastExitTap < 300) {
         gameOver = true; canInput = false;
-        overlay.style.display = 'flex';
-        exitBtn.style.display = 'none';
+        overlay.style.display = 'flex'; exitBtn.style.display = 'none';
         updateBestDisplay();
     } else {
         exitBtn.innerText = "TAP AGAIN!";
-        setTimeout(() => { exitBtn.innerText = "EXIT (DOUBLE TAP)"; }, 1000);
+        setTimeout(() => exitBtn.innerText = "EXIT (DOUBLE TAP)", 1000);
     }
     lastExitTap = now;
 });
 
-// --- INPUTS ---
 document.getElementById('startBtn').onclick = (e) => { e.stopPropagation(); resetGame(); };
 
 function handleDown(ex, ey) {
-    if (gameOver && canInput) { resetGame(); return; }
-    if (!canInput || gameOver) return;
+    if (gameOver) { resetGame(); return; }
     mouse.x = ex; mouse.y = ey;
-    buttons.forEach(b => { if (Math.hypot(mouse.x-b.x, mouse.y-b.y) < b.r+35) b.active = true; });
+    buttons.forEach(b => { if (Math.hypot(mouse.x - b.x, mouse.y - b.y) < b.r + 40) b.active = true; });
 }
 
 canvas.addEventListener("mousedown", e => handleDown(e.clientX, e.clientY));
 window.addEventListener("mouseup", () => {
-    if (!canInput || gameOver) return;
+    if (gameOver) return;
     if (buttons.filter(b => b.state !== 'trap_active').some(b => b.active)) endGame();
 });
 canvas.addEventListener("touchstart", e => { e.preventDefault(); handleDown(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
-window.addEventListener("touchend", () => { if (!canInput || gameOver) return; if (buttons.filter(b => b.state !== 'trap_active').some(b=>b.active)) endGame(); });
+window.addEventListener("touchend", () => { if (!gameOver && buttons.filter(b => b.state !== 'trap_active').some(b=>b.active)) endGame(); });
 window.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 window.addEventListener("touchmove", e => { e.preventDefault(); mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; }, {passive:false});
 
@@ -207,11 +230,14 @@ function update() {
     if (normals.every(b => b.active)) {
         time += 0.016;
         if (time < 5) phase = 1; else if (time < 12) phase = 2; else if (time < 22) phase = 3; else if (time < 35) phase = 4; else if (time < 45) phase = 5; else if (time < 60) phase = 6; else phase = 7;
+        
         buttons.forEach(b => b.update(0.016));
+        
         if (phase >= 3 && buttons.length < 2) buttons.push(new GameButton(Math.random()*canvas.width, Math.random()*canvas.height, 40, '#2ed573'));
         if (phase >= 5 && buttons.length < 3) buttons.push(new GameButton(Math.random()*canvas.width, Math.random()*canvas.height, 35, '#3742fa'));
-        normals.forEach(b => { if (Math.hypot(mouse.x-b.x, mouse.y-b.y) > b.r+45) endGame(); });
-        buttons.forEach(b => { if (b.state === 'trap_active' && Math.hypot(mouse.x-b.x, mouse.y-b.y) < b.r+15) endGame(); });
+
+        normals.forEach(b => { if (Math.hypot(mouse.x - b.x, mouse.y - b.y) > b.r + 45) endGame(); });
+        buttons.forEach(b => { if (b.state === 'trap_active' && Math.hypot(mouse.x - b.x, mouse.y - b.y) < b.r + 15) endGame(); });
     }
 }
 
@@ -223,18 +249,18 @@ function draw() {
 
     buttons.forEach(b => b.draw());
     
-    ctx.fillStyle = (currentTheme === 'chill') ? "#555" : "#fff"; 
-    ctx.font = "bold 22px monospace"; ctx.textAlign = "left";
+    ctx.fillStyle = (currentTheme === 'chill') ? "#555" : "#fff";
+    ctx.font = "bold 20px monospace"; ctx.textAlign = "left";
     if (!gameOver) ctx.fillText(`PHASE:${phase} TIME:${time.toFixed(2)}s`, 25, 45);
 
-    if (gameOver && canInput) {
-        ctx.fillStyle = "rgba(0,0,0,0.96)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.textAlign = "center"; ctx.fillStyle = themes[currentTheme].accent; ctx.font = "bold 35px Arial";
+    if (gameOver) {
+        ctx.fillStyle = "rgba(0,0,0,0.95)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.textAlign = "center"; ctx.fillStyle = t.accent; ctx.font = "bold 35px Arial";
         ctx.fillText("TRAINING REPORT", canvas.width/2, 80);
-        drawRadar(canvas.width/2, canvas.height/2, 110);
+        drawRadar(canvas.width/2, canvas.height/2, 100);
         ctx.fillStyle = "#fff"; ctx.font = "18px Arial";
-        ctx.fillText(`SCORE: ${time.toFixed(2)}s`, canvas.width/2, canvas.height - 110);
-        ctx.fillText("TAP ANYWHERE TO RESTART", canvas.width/2, canvas.height - 70);
+        ctx.fillText(`SCORE: ${time.toFixed(2)}s`, canvas.width/2, canvas.height - 100);
+        ctx.fillText("TAP TO RESTART", canvas.width/2, canvas.height - 60);
     }
 }
 
